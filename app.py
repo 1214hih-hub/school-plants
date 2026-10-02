@@ -1,6 +1,6 @@
-import time
 import base64
 import io
+import time
 from urllib.parse import quote
 
 import requests
@@ -49,22 +49,25 @@ def wiki_summary(names):
     return ""
 
 
-def identify(jpeg, key):
-    r = None
+def call_plantnet(jpeg, key):
+    last_error = ""
     for attempt in range(3):
         try:
-            r = requests.post(
+            return requests.post(
                 "https://my-api.plantnet.org/v2/identify/all",
                 params={"api-key": key, "lang": "ko", "nb-results": 3},
                 files=[("images", ("plant.jpg", jpeg, "image/jpeg"))],
                 data={"organs": "auto"},
                 timeout=(15, 60),
             )
-             break
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as e:
+            last_error = type(e).__name__
             time.sleep(3)
-    if r is None:
-        raise RuntimeError("식물 검색 서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.")
+    raise RuntimeError("식물 검색 서버에 연결하지 못했습니다 (%s). 잠시 후 다시 시도하세요." % last_error)
+
+
+def identify(jpeg, key):
+    r = call_plantnet(jpeg, key)
     if r.status_code == 404:
         return []
     if r.status_code != 200:
@@ -163,8 +166,10 @@ if st.button("🔍 검색하기", type="primary"):
                 st.session_state["jpeg"] = jpeg
                 st.session_state["cands"] = cands
                 st.session_state["done"] = False
-            except Exception as e:
+            except RuntimeError as e:
                 st.error("검색에 실패했습니다: %s" % e)
+            except Exception as e:
+                st.error("검색에 실패했습니다 (%s). 잠시 후 다시 시도하세요." % type(e).__name__)
 
 cands = st.session_state.get("cands")
 if cands is not None:
@@ -213,6 +218,8 @@ if cands is not None:
                 st.success("Padlet에 게시했습니다! 🎉")
                 st.session_state["done"] = True
             except Exception as e:
-                st.error("자동 게시에 실패했습니다: %s" % e)
+                st.error("자동 게시에 실패했습니다 (%s)." % type(e).__name__)
+                if isinstance(e, RuntimeError):
+                    st.write(str(e))
                 st.info("아래 내용을 복사해서 Padlet에 직접 붙여 넣어도 됩니다.")
                 st.code(name + "\n\n" + body, language=None)
