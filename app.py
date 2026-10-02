@@ -1,3 +1,4 @@
+import time
 import base64
 import io
 from urllib.parse import quote
@@ -49,13 +50,21 @@ def wiki_summary(names):
 
 
 def identify(jpeg, key):
-    r = requests.post(
-        "https://my-api.plantnet.org/v2/identify/all",
-        params={"api-key": key, "lang": "ko", "nb-results": 3},
-        files=[("images", ("plant.jpg", jpeg, "image/jpeg"))],
-        data={"organs": "auto"},
-        timeout=60,
-    )
+    r = None
+    for attempt in range(3):
+        try:
+            r = requests.post(
+                "https://my-api.plantnet.org/v2/identify/all",
+                params={"api-key": key, "lang": "ko", "nb-results": 3},
+                files=[("images", ("plant.jpg", jpeg, "image/jpeg"))],
+                data={"organs": "auto"},
+                timeout=(15, 60),
+            )
+             break
+        except requests.exceptions.RequestException:
+            time.sleep(3)
+    if r is None:
+        raise RuntimeError("식물 검색 서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.")
     if r.status_code == 404:
         return []
     if r.status_code != 200:
